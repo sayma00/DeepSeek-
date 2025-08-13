@@ -1,0 +1,227 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FRC Bangladesh Chatbox</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f4f6f9;
+    }
+    header {
+      background-color: #ffffff;
+      padding: 20px 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    .header-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    header img {
+      height: 70px;
+    }
+    header h1 {
+      font-size: 22px;
+      color: #333;
+      margin: 0;
+      text-align: center;
+    }
+    .container {
+      max-width: 900px;
+      margin: 30px auto;
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    #chat {
+      border: 1px solid #ddd;
+      padding: 15px;
+      height: 400px;
+      overflow-y: auto;
+      background-color: #fdfdfd;
+      white-space: pre-wrap;
+      border-radius: 8px;
+    }
+    #inputArea {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    #userInput {
+      flex-grow: 1;
+      height: 60px;
+      padding: 10px;
+      font-size: 15px;
+      resize: vertical;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #0a4d91;
+      color: white;
+      padding: 10px 18px;
+      font-size: 15px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    button:hover {
+      background-color: #083b6f;
+    }
+    #fileUpload {
+      margin-top: 15px;
+    }
+    input[type="file"] {
+      margin-right: 10px;
+    }
+    .remove-button {
+      margin-left: 10px;
+      padding: 2px 6px;
+      font-size: 12px;
+      background: #f44336;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    ul#fileList {
+      margin-top: 10px;
+      list-style: disc;
+      padding-left: 20px;
+    }
+    .download-section {
+      margin-top: 20px;
+      display: none;
+    }
+    .download-section a {
+      background: #28a745;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 6px;
+      text-decoration: none;
+    }
+    .download-section a:hover {
+      background: #218838;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-content">
+    <img src="{% static 'frc-logo.png' %}" alt="FRC Logo" />
+    <h1>Financial Reporting Council Bangladesh</h1>
+  </div>
+</header>
+
+<div class="container">
+  <div id="chat"></div>
+
+  <div id="inputArea">
+    <textarea id="userInput" placeholder="Type your message..."></textarea>
+    <button onclick="sendMessage()">Send</button>
+  </div>
+
+  <div id="fileUpload">
+    <input type="file" id="fileInput" multiple />
+    <ul id="fileList"></ul>
+  </div>
+
+  <!-- ✅ JSON Download Section -->
+  <div id="jsonSection" class="download-section">
+    <p>🔽 <strong>Download Extracted JSON:</strong></p>
+    <a id="jsonDownloadLink" href="#" download>Download JSON File</a>
+  </div>
+</div>
+
+<script>
+  const userInput = document.getElementById("userInput");
+  const chatBox = document.getElementById("chat");
+  const fileInput = document.getElementById("fileInput");
+  const fileList = document.getElementById("fileList");
+  const jsonSection = document.getElementById("jsonSection");
+  const jsonDownloadLink = document.getElementById("jsonDownloadLink");
+
+  let selectedFiles = [];
+
+  fileInput.addEventListener("change", () => {
+    for (const file of fileInput.files) {
+      const exists = selectedFiles.some(f => f.name === file.name && f.size === file.size);
+      if (!exists) selectedFiles.push(file);
+    }
+    fileInput.value = "";
+    renderFileList();
+  });
+
+  function renderFileList() {
+    fileList.innerHTML = "";
+    selectedFiles.forEach((file, index) => {
+      const li = document.createElement("li");
+      li.textContent = file.name;
+
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "Remove";
+      removeBtn.className = "remove-button";
+      removeBtn.onclick = () => {
+        selectedFiles.splice(index, 1);
+        renderFileList();
+      };
+
+      li.appendChild(removeBtn);
+      fileList.appendChild(li);
+    });
+  }
+
+  async function sendMessage() {
+    const message = userInput.value.trim();
+    if (!message && selectedFiles.length === 0) return;
+
+    chatBox.innerHTML += `<p><b>You:</b> ${message}</p>`;
+    userInput.value = "";
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    const formData = new FormData();
+    formData.append("message", message);
+    selectedFiles.forEach(file => formData.append("files", file));
+
+    const response = await fetch("/chat/", {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await response.json();
+    chatBox.innerHTML += `<p><b>FRC:</b> ${data.response}</p>`;
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    // ✅ JSON file response handler
+    if (data.json_url) {
+      jsonSection.style.display = "block";
+      jsonDownloadLink.href = data.json_url;
+      jsonDownloadLink.download = data.json_filename || "extracted_data.json";
+    } else {
+      jsonSection.style.display = "none";
+    }
+
+    selectedFiles = [];
+    renderFileList();
+  }
+
+  userInput.addEventListener("keydown", function(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+    }
+  });
+</script>
+
+</body>
+</html>
